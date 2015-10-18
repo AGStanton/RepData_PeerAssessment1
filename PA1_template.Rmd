@@ -6,20 +6,218 @@ output:
 ---
 
 
-## Loading and preprocessing the data
 
 
 
-## What is mean total number of steps taken per day?
+## Loading and Preprocessing the Data
+
+First things first, let's load the packages we are going to use, read in the data, 
+and create a data frame without NA's, which we will be using for the first couple sections.
+
+```{r, results='hide', message=FALSE}
+library(dplyr)
+library(lattice)
+
+## import data and remove NA's 
+df <- read.csv("activity.csv")
+nonNAdf <- df[!is.na(df$steps),]
+```
+
+
+
+
+
+## What is the mean total number of steps taken per day?
+
+First, we want to find the total steps in each day. This will allow us to plot 
+the histogram showing which buckets of total steps that days fall into.
+
+```{r}
+## group data by date, and calculate the total steps during each date
+totalSteps <- nonNAdf %>% group_by(date) %>% summarize(totalStepsPerDay = sum(steps))
+print(totalSteps, n = nrow(totalSteps))
+
+## plot frequency of numbers of steps per day
+hist(totalSteps$totalStepsPerDay, breaks = 10, 
+     xlab = "Total Steps in each Day (October 1st through November 30th)",
+     main = "Histogram of Total Steps in each Day")
+```
+
+Looking at the histogram, the 10,000-12,000 bucket has the most days, which would also
+necessarily be the case for a histogram of mean steps across each day (the assignment, 
+however, specifically asked for total steps). Now that we have a feel for the distribution, 
+in addition to the total steps, let's also compute the mean and median steps for each day, 
+which we will print for examination.
+
+```{r}
+## group data by date again, and calculate the mean and median steps during each date
+meanSteps <- nonNAdf %>% group_by(date) %>% summarize(meanStepsPerDay = mean(steps))
+medianSteps <- nonNAdf %>% group_by(date) %>% summarize(medianStepsPerDay = median(steps))
+
+## combine the total, mean, and median numbers into one dataframe to display
+summaryDF <- cbind(totalSteps, meanSteps$meanStepsPerDay, medianSteps$medianStepsPerDay)
+names(summaryDF) <- c("Date", "Total Steps", "Mean Steps", "Median Steps")
+print(summaryDF)
+```
+
+Now we know the mean number of steps taken per day, as well as the median steps (and 
+total steps, which we had previously calculated). Notice how higher total steps always
+corresponds to higher mean steps for a given day, and vice versa.
+
+The median step numbers are almost all 0's. Why is this? Because a majority of intervals
+during the person's day did not involve taking any steps at all. 
+
+
 
 
 
 ## What is the average daily activity pattern?
 
+In the last section, we grouped steps by days. Now we want to group steps by interval, and
+take the mean for each interval across all the days. Let's plot the mean steps over time
+to view the average daily activity patterns.
+
+```{r}
+## group data by interval, and calculate the mean steps across all days
+meanInterval <- nonNAdf %>% group_by(interval) %>% summarize(meanIntervalSteps = mean(steps))
+
+## plot the mean steps vs the given interval
+plot(meanInterval$interval, meanInterval$meanIntervalSteps, type = "l",
+     main = "Mean Steps for each Interval",
+     xlab = "Interval (denoted by minute mark during day)",
+     ylab = "Mean Steps")
+```
+
+Interestingly, there is a peak in mean steps somewhere around the 800 or 900 interval mark.
+Let's find out what specific interval the peak occurs at.
+
+```{r}
+# find and print the interval with the highest mean steps
+maxMeanInterval <- filter(meanInterval, meanIntervalSteps == max(meanIntervalSteps))
+print(maxMeanInterval)
+```
+
+So the maximum mean steps 5-minute interval was the one starting at the `r maxMeanInterval[1,1]` minute mark.
 
 
-## Imputing missing values
+
+
+
+## Imputing Missing Values
+
+How many missing values are in the dataset? Let's count the NA's to find out.
+
+```{r}
+## count the number of NAs in the steps column
+NAcount <- count(df, steps == "NA")
+print(NAcount)
+```
+
+There are `r NAcount[2,2]` missing values in the dataset.
+
+That's a lot of missing values, so we should probably impute those missing values somehow. 
+One way we can do that is replace all the NA's with the mean steps for the given interval 
+in which the NA occurs. 
+
+```{r}
+## replace every NA with the mean steps for the given interval across all days
+imputedDF <- df
+for (i in 1:length(imputedDF$steps)) {
+        if (is.na(imputedDF[i, "steps"])) {
+                ## match the interval to the meanInterval df and sub in the mean steps
+                newSteps <- meanInterval[(meanInterval$interval == imputedDF[i, "interval"]), 
+                                         "meanIntervalSteps"]
+                imputedDF[i, "steps"] <- newSteps
+        }
+}
+```
+
+Now we have a new dataset that is equivalent to the original dataset, expect the missing 
+values are now filled in.
+
+Now let's make a histogram like we did before but now using this imputed data.
+
+```{r}
+## group data by date, and calculate the total steps during each date
+totalImputedSteps <- imputedDF %>% group_by(date) %>% summarize(totalStepsPerDay = sum(steps))
+
+## plot frequency of numbers of steps per day
+## note that, compared to 1st hist, distribution shape is similar
+## but total values are higher, and the 10000-12000 bucket grew a lot
+hist(totalImputedSteps$totalStepsPerDay, breaks = 10, 
+     xlab = "Total Steps in each Day (October 1st through November 30th)",
+     main = "Histogram of Total Steps in each Day after Imputation")
+```
+
+We can also compute the mean and median steps for each day like we did before but now using 
+this imputed data. 
+
+```{r}
+## group data by date again, and calculate the mean and median steps during each date
+meanImputedSteps <- imputedDF %>% group_by(date) %>% summarize(meanStepsPerDay = mean(steps))
+medianImputedSteps <- imputedDF %>% group_by(date) %>% summarize(medianStepsPerDay = median(steps))
+
+## combine the total, mean, and median numbers into one dataframe to display
+summaryImputedDF <- cbind(totalImputedSteps, meanImputedSteps$meanStepsPerDay, medianImputedSteps$medianStepsPerDay)
+names(summaryImputedDF) <- c("Date", "Total Steps", "Mean Steps", "Median Steps")
+print(summaryImputedDF)
+```
+
+As you can see, the values have changed from the first part of this assignment. Several days that had 
+no step values at all now have considerable step counts. And any other days that had a few NA's have also 
+increased their total number of steps. The total, mean, and median steps for days with no NA's stayed the same, 
+while the days with NA's saw their total and mean steps rise, and in some cases their median steps rose as well. 
+Overall, the impact of imputing missing values was an increase in the total number of daily steps.
+
+
 
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+It might be interesting to see whether there are distinct patterns in the data when 
+weekend days are separated from and compared to weekday days.
+
+To do this analysis, we first need to create a new column that specifies whether the 
+day occurred during the week or on the weekend.
+
+```{r}
+## convert dates to date type so weekdays() can work
+imputedDF$date <- as.Date(imputedDF$date)
+
+## initialize day type column
+imputedDF$dayType <- rep("", length(imputedDF$date))
+
+## use weekdays() to plug in weekend and weekday values where appropriate
+for (i in 1:length(imputedDF$date)) {
+        if (weekdays(imputedDF[i,"date"]) == "Saturday" | weekdays(imputedDF[i,"date"]) == "Sunday") {
+                imputedDF[i, "dayType"] <- "weekend"
+        } else {
+                imputedDF[i, "dayType"] <- "weekday"
+        }
+}
+
+## convert day type column to factor
+imputedDF$dayType <- as.factor(imputedDF$dayType)
+```
+
+Now let's plot one figure showing the weekend activity pattern, and another adjacent figure 
+showing the weekday activity pattern.
+
+```{r}
+## group data by dayType and then by interval, and calculate the mean steps across all days
+meanIntervalImputed <- imputedDF %>% group_by(dayType, interval) %>% summarize(meanIntervalSteps = mean(steps))
+
+## plot the mean steps vs the given interval for weekends and weekdays separately using lattice
+xyplot(meanIntervalSteps ~ interval | dayType, data = meanIntervalImputed, type = "l", layout = c(1,2),
+       main = "Mean Steps for each Interval by Day Type (weekend and weekday)",
+       xlab = "Interval", ylab = "Mean Steps")
+```
+
+Inspecting the figures, it looks like activity on weekends tends to be more uniform throughout the day, 
+while weekday activity is generally lower but has a considerable spike around the 800-minute mark. One can 
+imagine that people are less active during weekdays because they may have jobs requiring them to sit for 
+long periods of time, while on weekends people tend to be less restrained in their activities. This is 
+only speculation, however. 
+
+Thank you very much for taking the time to read this document, I hope it was enjoyable!
